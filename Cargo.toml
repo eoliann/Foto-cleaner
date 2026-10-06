@@ -1,0 +1,33 @@
+[package]
+name = "foto-cleaner"
+version = "1.0.0"
+edition = "2024"
+description = "Editor portabil de fotografii: corecții, retuș, eliminare și înlocuire fundal cu AI local"
+readme = "README.md"
+rust-version = "1.94"
+publish = false
+
+[dependencies]
+eframe = { version = "0.32", default-features = false, features = ["default_fonts", "glow"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "bmp"] }
+jpeg-encoder = "0.6"
+rfd = "0.15"
+rten = { version = "0.26", default-features = false, features = ["onnx_format"] }
+
+[profile.release]
+lto = "thin"
+opt-level = 3
+panic = "abort"
+strip = true
+
+# Procesarea imaginilor este lentă fără optimizări; și în modul debug
+# dependențele și codul propriu sunt compilate optimizat.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+# Permite compilarea și rularea testelor și pe Linux (aplicația țintește Windows).
+[target.'cfg(target_os = "linux")'.dependencies]
+eframe = { version = "0.32", default-features = false, features = ["default_fonts", "glow", "x11", "wayland"] }
