@@ -1,9 +1,19 @@
-![OS](https://img.shields.io/badge/OS-Windows-blue?style=plastic)
-![Lang](https://img.shields.io/badge/Lang-Rust-magenta?style=plastic)
+![Followers](https://img.shields.io/github/followers/eoliann?style=plastic&color=green)
+![Watchers](https://img.shields.io/github/watchers/eoliann/Foto-cleaner?style=plastic)
+![Stars](https://img.shields.io/github/stars/eoliann/Foto-cleaner?style=plastic)
 
 [![Donate](https://img.shields.io/badge/Donate-PayPal-blue?style=plastic)](https://www.paypal.com/donate/?hosted_button_id=PTH2EXUDS423S)
 [![Donate](https://img.shields.io/badge/Donate-Revolut-8A2BE2?style=plastic)](https://revolut.me/adriannm9)
 [![Donate](https://img.shields.io/badge/Donate-KoFi-green?style=plastic)](https://ko-fi.com/eoliann)
+
+![Release Date](https://img.shields.io/github/release-date/eoliann/Foto-cleaner?style=plastic)
+![Last Commit](https://img.shields.io/github/last-commit/eoliann/Foto-cleaner?style=plastic)
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/eoliann/Foto-cleaner/total?style=plastic)
+[![Downloads latest](https://img.shields.io/github/downloads/eoliann/Foto-cleaner/latest/total?style=plastic)](https://github.com/eoliann/Foto-cleaner/releases/latest/download/Foto-cleaner-windows.zip)
+
+![OS](https://img.shields.io/badge/OS-Windows-blue?style=plastic)
+![Lang](https://img.shields.io/badge/Lang-Rust-magenta?style=plastic)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=plastic)](LICENSE.md)
 
 # Foto Cleaner
 
