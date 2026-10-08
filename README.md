@@ -35,6 +35,13 @@ Aplicație desktop Windows, portabilă și offline, care curăță și corecteaz
 - pensulă pentru pete: click pe coșuri, pete sau praf și zona este reconstruită din textura din jur;
 - reducerea zgomotului / granulației cu un filtru care păstrează marginile.
 
+**Eliminare watermark / obiecte (AI local, MI-GAN):**
+
+- pictezi cu pensula peste watermark, text, data imprimată de aparat sau un obiect mic nedorit, apoi apeși **Elimină zona marcată**;
+- zona este reconstruită de AI din ce se află în jur, la rezoluția completă a fotografiei; zonele marcate departe una de alta sunt procesate separat;
+- poți anula ultimele 5 eliminări; dacă modelul AI nu poate fi folosit, zona este umplută prin metoda clasică;
+- folosește funcția doar pe fotografii proprii sau pe care ai dreptul să le modifici.
+
 **Detectarea feței (AI local, YuNet):**
 
 - îndreptare automată după linia ochilor, plus îndreptare manuală de ±15°;
@@ -65,8 +72,9 @@ Ca la aplicația inițială, poți roti imaginea, poți trage fotografia peste f
 1. Deschide `Foto-cleaner.exe` și încarcă fotografia (sau trage-o peste fereastră).
 2. Apasă **✨ Auto-corecție**, apoi reglează fin dacă e nevoie. Bifează **Arată originalul** ca să compari.
 3. Pentru pete: bifează **Pensulă pete**, alege mărimea și dă click pe fiecare pată.
-4. Alege fundalul. Prima procesare AI durează câteva secunde.
-5. Alege formatul final și apasă **Salvează imaginea** sau **Printează direct**.
+4. Pentru watermark sau obiecte: bifează **Pensulă watermark**, pictează peste zona respectivă și apasă **Elimină zona marcată**. La zone mari, rezultatul e mai bun dacă elimini pe bucăți.
+5. Alege fundalul. Prima procesare AI durează câteva secunde.
+6. Alege formatul final și apasă **Salvează imaginea** sau **Printează direct**.
 
 Previzualizarea folosește o copie micșorată, ca să răspundă rapid. Exportul este procesat la rezoluție completă, cu aceleași setări.
 
@@ -86,7 +94,8 @@ Structura codului:
 - `src/main.rs`: interfața (eframe/egui), firele de lucru, salvarea și printarea;
 - `src/processing.rs`: filtrele, retușul, auto-corecția, compunerea fundalului și încadrarea;
 - `src/ai.rs`: segmentarea persoanei cu MODNet;
-- `src/face.rs`: detectarea feței și a reperelor cu YuNet.
+- `src/face.rs`: detectarea feței și a reperelor cu YuNet;
+- `src/inpaint.rs`: eliminarea watermark-urilor și a obiectelor cu MI-GAN (plus umplere clasică de rezervă).
 
 ## Build portabil
 
@@ -98,4 +107,4 @@ Executabilul independent va fi creat în `dist\Foto-cleaner.exe`. Un tag `v*` (d
 
 ## Tehnologii
 
-Rust cu `eframe/egui`, crate-ul `image` și filtre proprii (filtru ghidat, unsharp mask, interpolare Shepard pentru retuș). Rulează două modele AI prin runtime-ul `RTen`: MODNet pentru eliminarea fundalului (Apache-2.0) și YuNet pentru detectarea feței (MIT, ~230 KB). Ambele sunt incluse în executabil; detaliile sunt în [`assets/README.md`](assets/README.md).
+Rust cu `eframe/egui`, crate-ul `image` și filtre proprii (filtru ghidat, unsharp mask, interpolare Shepard pentru retuș). Rulează trei modele AI prin runtime-ul `RTen`: MODNet pentru eliminarea fundalului (Apache-2.0), YuNet pentru detectarea feței (MIT, ~230 KB) și MI-GAN pentru eliminarea watermark-urilor (MIT, ~27 MB). Toate sunt incluse în executabil; detaliile sunt în [`assets/README.md`](assets/README.md).

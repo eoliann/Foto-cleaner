@@ -2,6 +2,7 @@
 
 mod ai;
 mod face;
+mod inpaint;
 mod processing;
 
 use std::{
@@ -15,12 +16,15 @@ use eframe::egui::{
 };
 use face::Face;
 use image::{DynamicImage, GrayImage, ImageDecoder, ImageReader, RgbImage, RgbaImage};
+use inpaint::Stroke as MaskStroke;
 use jpeg_encoder::{ColorType, Density, Encoder};
 use processing::{Adjustments, BackgroundMode, Framing, OutputFormat, RenderSettings, Spot};
 
 const DPI: u16 = 300;
 /// Latura lungă a copiei folosite pentru previzualizare (randare rapidă).
 const PREVIEW_LONG_EDGE: u32 = 1400;
+/// Câte eliminări de watermark pot fi anulate.
+const MAX_UNDO: usize = 5;
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -94,6 +98,28 @@ struct FaceResult {
     faces: Result<Vec<Face>, String>,
 }
 
+/// Ce determină aspectul suprapunerii roșii peste zona marcată.
+#[derive(PartialEq)]
+struct OverlayKey {
+    strokes: Vec<MaskStroke>,
+    framing: Framing,
+    size: [usize; 2],
+    base: (u32, u32),
+}
+
+struct InpaintJob {
+    generation: u64,
+    source: Arc<RgbImage>,
+    strokes: Vec<MaskStroke>,
+}
+
+struct InpaintResult {
+    generation: u64,
+    image: RgbImage,
+    /// Motivul pentru care s-a folosit umplerea clasică în locul AI.
+    fallback: Option<String>,
+}
+
 struct RenderJob {
     id: u64,
     base: Arc<RgbImage>,
@@ -125,6 +151,15 @@ struct PhotoApp {
     edge_firmness: f32,
     retouch_mode: bool,
     brush_size: f32,
+    watermark_mode: bool,
+    watermark_brush: f32,
+    watermark_strokes: Vec<MaskStroke>,
+    watermark_running: bool,
+    watermark_generation: u64,
+    watermark_overlay: Option<(OverlayKey, TextureHandle)>,
+    undo_sources: Vec<Arc<RgbImage>>,
+    inpaint_tx: mpsc::Sender<InpaintJob>,
+    inpaint_rx: mpsc::Receiver<InpaintResult>,
     show_original: bool,
     export_kind: ExportKind,
 
@@ -169,6 +204,9 @@ impl PhotoApp {
         let (face_tx, face_job_rx) = mpsc::channel();
         let (face_result_tx, face_rx) = mpsc::channel();
         start_face_worker(face_job_rx, face_result_tx, cc.egui_ctx.clone());
+        let (inpaint_tx, inpaint_job_rx) = mpsc::channel();
+        let (inpaint_result_tx, inpaint_rx) = mpsc::channel();
+        start_inpaint_worker(inpaint_job_rx, inpaint_result_tx, cc.egui_ctx.clone());
         let (task_tx, task_rx) = mpsc::channel();
         Self {
             source: None,
@@ -187,6 +225,15 @@ impl PhotoApp {
             edge_firmness: 30.0,
             retouch_mode: false,
             brush_size: 1.5,
+            watermark_mode: false,
+            watermark_brush: 1.2,
+            watermark_strokes: Vec::new(),
+            watermark_running: false,
+            watermark_generation: 0,
+            watermark_overlay: None,
+            undo_sources: Vec::new(),
+            inpaint_tx,
+            inpaint_rx,
             show_original: false,
             export_kind: ExportKind::Jpeg,
             texture: None,
@@ -233,6 +280,10 @@ impl PhotoApp {
                 self.source_path = Some(path);
                 self.adjustments = Adjustments::default();
                 self.spots.clear();
+                self.watermark_strokes.clear();
+                self.undo_sources.clear();
+                self.watermark_generation = self.watermark_generation.wrapping_add(1);
+                self.watermark_running = false;
                 self.framing.zoom = 1.0;
                 self.framing.offset_x = 0.0;
                 self.framing.offset_y = 0.0;
@@ -310,13 +361,31 @@ impl PhotoApp {
             .mask_preview
             .as_deref()
             .map(|m| Arc::new(rotate_gray(m)));
-        for spot in &mut self.spots {
-            let (x, y) = (spot.x, spot.y);
-            (spot.x, spot.y) = if clockwise {
+        let rotate_point = |(x, y): (f32, f32)| {
+            if clockwise {
                 (1.0 - y, x)
             } else {
                 (y, 1.0 - x)
-            };
+            }
+        };
+        for spot in &mut self.spots {
+            (spot.x, spot.y) = rotate_point((spot.x, spot.y));
+        }
+        for stroke in &mut self.watermark_strokes {
+            for point in &mut stroke.points {
+                *point = rotate_point(*point);
+            }
+        }
+        self.undo_sources = self
+            .undo_sources
+            .iter()
+            .map(|image| Arc::new(rotate_rgb(image)))
+            .collect();
+        if self.watermark_running {
+            // Rezultatul în curs corespunde orientării vechi: este ignorat.
+            self.watermark_generation = self.watermark_generation.wrapping_add(1);
+            self.watermark_running = false;
+            self.status = "Eliminarea a fost anulată din cauza rotirii; apasă din nou.".to_owned();
         }
         if matches!(self.ai_state, AiState::Running) {
             // Masca în curs de calcul corespunde orientării vechi: o cerem din nou.
@@ -490,6 +559,7 @@ impl PhotoApp {
     fn ready_for_export(&self) -> bool {
         self.source.is_some()
             && !self.busy
+            && !self.watermark_running
             && (!self.background.needs_mask() || self.mask_full.is_some())
     }
 
@@ -625,6 +695,71 @@ impl PhotoApp {
         });
     }
 
+    // --- Watermark / obiecte -----------------------------------------------
+
+    fn request_watermark_removal(&mut self) {
+        let Some(source) = self.source.clone() else {
+            return;
+        };
+        if self.watermark_running || self.watermark_strokes.is_empty() {
+            return;
+        }
+        self.watermark_generation = self.watermark_generation.wrapping_add(1);
+        let job = InpaintJob {
+            generation: self.watermark_generation,
+            source,
+            strokes: self.watermark_strokes.clone(),
+        };
+        if self.inpaint_tx.send(job).is_ok() {
+            self.watermark_running = true;
+            self.status = "Se reconstruiește zona marcată...".to_owned();
+        } else {
+            self.status = "Motorul de eliminare nu a putut porni.".to_owned();
+        }
+    }
+
+    fn receive_inpaint_results(&mut self) {
+        while let Ok(result) = self.inpaint_rx.try_recv() {
+            if result.generation != self.watermark_generation {
+                continue;
+            }
+            self.watermark_running = false;
+            if let Some(previous) = self.source.take() {
+                self.undo_sources.push(previous);
+                if self.undo_sources.len() > MAX_UNDO {
+                    self.undo_sources.remove(0);
+                }
+            }
+            self.set_edited_source(result.image);
+            self.watermark_strokes.clear();
+            self.status = match result.fallback {
+                None => "Zona marcată a fost eliminată cu AI. Poți marca altă zonă sau anula."
+                    .to_owned(),
+                Some(reason) => format!(
+                    "Zona a fost umplută prin metoda clasică ({reason}). Poți anula dacă nu arată bine."
+                ),
+            };
+        }
+    }
+
+    fn undo_watermark_removal(&mut self) {
+        if self.watermark_running {
+            return;
+        }
+        if let Some(previous) = self.undo_sources.pop() {
+            self.set_edited_source(Arc::unwrap_or_clone(previous));
+            self.status = "Ultima eliminare a fost anulată.".to_owned();
+        }
+    }
+
+    /// Înlocuiește sursa cu o versiune retușată (aceleași dimensiuni). Masca
+    /// persoanei și fața detectată rămân valabile.
+    fn set_edited_source(&mut self, image: RgbImage) {
+        self.preview_base = Some(Arc::new(downscale(&image, PREVIEW_LONG_EDGE)));
+        self.source = Some(Arc::new(image));
+        self.dirty = true;
+    }
+
     // --- AI -----------------------------------------------------------------
 
     fn request_background_removal(&mut self) {
@@ -727,6 +862,7 @@ impl eframe::App for PhotoApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         self.receive_inference_results();
         self.receive_face_results();
+        self.receive_inpaint_results();
         self.receive_renders(ctx);
         while let Ok(message) = self.task_rx.try_recv() {
             self.busy = false;
@@ -930,10 +1066,16 @@ impl PhotoApp {
             if changed {
                 self.dirty = true;
             }
-            ui.checkbox(
-                &mut self.retouch_mode,
-                black("Pensulă pete: click pe imagine pentru a șterge"),
-            );
+            if ui
+                .checkbox(
+                    &mut self.retouch_mode,
+                    black("Pensulă pete: click pe imagine pentru a șterge"),
+                )
+                .changed()
+                && self.retouch_mode
+            {
+                self.watermark_mode = false;
+            }
             ui.add(
                 Slider::new(&mut self.brush_size, 0.3..=8.0)
                     .text("Mărime pensulă")
@@ -957,6 +1099,78 @@ impl PhotoApp {
                 }
                 ui.label(black(format!("{} pete", self.spots.len())));
             });
+
+            // --- Watermark ------------------------------------------------
+            heading(ui, "Eliminare watermark / obiecte");
+            ui.label(black(
+                "Pictează peste watermark, text, dată sau obiectul nedorit, apoi apasă „Elimină”. \
+                 AI-ul local reconstruiește zona din jur.",
+            ));
+            if ui
+                .checkbox(
+                    &mut self.watermark_mode,
+                    black("Pensulă watermark: pictează zona de eliminat"),
+                )
+                .changed()
+                && self.watermark_mode
+            {
+                self.retouch_mode = false;
+            }
+            ui.add(
+                Slider::new(&mut self.watermark_brush, 0.2..=6.0)
+                    .text("Mărime pensulă")
+                    .text_color(Color32::BLACK)
+                    .fixed_decimals(1),
+            );
+            ui.horizontal(|ui| {
+                let can_remove = !self.watermark_strokes.is_empty() && !self.watermark_running;
+                let remove = egui::Button::new(RichText::new("Elimină zona marcată").strong())
+                    .fill(Color32::from_rgb(200, 70, 60));
+                if ui.add_enabled(can_remove, remove).clicked() {
+                    self.request_watermark_removal();
+                }
+                if self.watermark_running {
+                    ui.spinner();
+                }
+            });
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(
+                        !self.watermark_strokes.is_empty(),
+                        egui::Button::new("Anulează trăsătura"),
+                    )
+                    .clicked()
+                {
+                    self.watermark_strokes.pop();
+                }
+                if ui
+                    .add_enabled(
+                        !self.watermark_strokes.is_empty(),
+                        egui::Button::new("Șterge marcajul"),
+                    )
+                    .clicked()
+                {
+                    self.watermark_strokes.clear();
+                }
+            });
+            if ui
+                .add_enabled(
+                    !self.undo_sources.is_empty() && !self.watermark_running,
+                    egui::Button::new(format!(
+                        "⟲ Anulează ultima eliminare ({})",
+                        self.undo_sources.len()
+                    )),
+                )
+                .clicked()
+            {
+                self.undo_watermark_removal();
+            }
+            ui.label(
+                black(
+                    "Folosește doar pe fotografii proprii sau pe care ai dreptul să le modifici.",
+                )
+                .small(),
+            );
 
             // --- Fundal ---------------------------------------------------
             heading(ui, "Fundal");
@@ -1169,6 +1383,8 @@ impl PhotoApp {
         );
         let hint = if self.show_original {
             "Original, fără corecții."
+        } else if self.watermark_mode {
+            "Pictează (ține apăsat și trage) peste zona de eliminat; zona marcată apare cu roșu."
         } else if self.retouch_mode {
             "Click pe pete, coșuri sau praf pentru a le elimina."
         } else {
@@ -1198,7 +1414,9 @@ impl PhotoApp {
         if size.y > available.y {
             size = Vec2::new(available.y * ratio, available.y);
         }
-        let sense = if self.retouch_mode && !self.show_original {
+        let sense = if self.watermark_mode && !self.show_original {
+            egui::Sense::click_and_drag()
+        } else if self.retouch_mode && !self.show_original {
             egui::Sense::click()
         } else {
             egui::Sense::hover()
@@ -1254,10 +1472,120 @@ impl PhotoApp {
             }
         }
 
+        let k = processing::rotation_scale(bw, bh, angle);
+        // Punct pe ecran → coordonate normalizate ale sursei.
+        let to_source = |pos: egui::Pos2| {
+            let u = ((pos.x - rect.left()) / rect.width()).clamp(0.0, 1.0);
+            let v = ((pos.y - rect.top()) / rect.height()).clamp(0.0, 1.0);
+            let rx = cx as f32 + u * cw as f32;
+            let ry = cy as f32 + v * ch as f32;
+            let (px, py) = processing::rotated_to_source(rx, ry, bw, bh, angle);
+            (px / bw as f32, py / bh as f32)
+        };
+        let norm_to_screen =
+            |radius_norm: f32| radius_norm * bw.max(bh) as f32 * k * screen_per_pixel;
+
+        if !self.show_original && !self.watermark_strokes.is_empty() {
+            // Zona marcată se desenează ca o singură textură semi-transparentă,
+            // refăcută doar când se schimbă trăsăturile, încadrarea sau mărimea.
+            let size = [
+                rect.width().round().max(1.0) as usize,
+                rect.height().round().max(1.0) as usize,
+            ];
+            let key = OverlayKey {
+                strokes: self.watermark_strokes.clone(),
+                framing: self.framing,
+                size,
+                base: (bw, bh),
+            };
+            let stale = self
+                .watermark_overlay
+                .as_ref()
+                .is_none_or(|(old, _)| *old != key);
+            if stale {
+                let mask = inpaint::rasterize_strokes(&self.watermark_strokes, bw, bh);
+                let color = Color32::from_rgba_unmultiplied(255, 40, 40, 120);
+                let mut pixels = vec![Color32::TRANSPARENT; size[0] * size[1]];
+                for y in 0..size[1] {
+                    for x in 0..size[0] {
+                        let pos = egui::pos2(
+                            rect.left() + (x as f32 + 0.5) * rect.width() / size[0] as f32,
+                            rect.top() + (y as f32 + 0.5) * rect.height() / size[1] as f32,
+                        );
+                        let (u, v) = to_source(pos);
+                        let px = ((u * bw as f32) as u32).min(bw - 1);
+                        let py = ((v * bh as f32) as u32).min(bh - 1);
+                        if mask.get_pixel(px, py)[0] > 127 {
+                            pixels[y * size[0] + x] = color;
+                        }
+                    }
+                }
+                let texture = ui.ctx().load_texture(
+                    "zona-watermark",
+                    ColorImage::new(size, pixels),
+                    TextureOptions::LINEAR,
+                );
+                self.watermark_overlay = Some((key, texture));
+            }
+            if let Some((_, texture)) = &self.watermark_overlay {
+                ui.painter().with_clip_rect(rect).image(
+                    texture.id(),
+                    rect,
+                    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                    Color32::WHITE,
+                );
+            }
+        }
+
+        if self.watermark_mode && !self.show_original {
+            let radius_norm = self.watermark_brush / 100.0;
+            if let Some(pos) = response.hover_pos() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+                let r = norm_to_screen(radius_norm);
+                ui.painter()
+                    .circle_stroke(pos, r, Stroke::new(2.0_f32, Color32::WHITE));
+                ui.painter().circle_stroke(
+                    pos,
+                    r + 1.5,
+                    Stroke::new(1.0_f32, Color32::from_rgb(200, 40, 40)),
+                );
+            }
+            if self.watermark_running {
+                return;
+            }
+            if response.drag_started()
+                && let Some(pos) = response.interact_pointer_pos()
+            {
+                self.watermark_strokes.push(MaskStroke {
+                    points: vec![to_source(pos)],
+                    radius: radius_norm,
+                });
+            } else if response.dragged()
+                && let (Some(pos), Some(stroke)) = (
+                    response.interact_pointer_pos(),
+                    self.watermark_strokes.last_mut(),
+                )
+            {
+                let point = to_source(pos);
+                let last = stroke.points.last().copied().unwrap_or(point);
+                let step = (radius_norm * 0.3).max(0.0005);
+                if (point.0 - last.0).hypot(point.1 - last.1) >= step {
+                    stroke.points.push(point);
+                }
+            } else if response.clicked()
+                && let Some(pos) = response.interact_pointer_pos()
+            {
+                self.watermark_strokes.push(MaskStroke {
+                    points: vec![to_source(pos)],
+                    radius: radius_norm,
+                });
+            }
+            return;
+        }
+
         if !(self.retouch_mode && !self.show_original) {
             return;
         }
-        let k = processing::rotation_scale(bw, bh, angle);
         let radius_norm = self.brush_size / 100.0;
         let radius_screen = radius_norm * bw.max(bh) as f32 * k * screen_per_pixel;
 
@@ -1274,14 +1602,10 @@ impl PhotoApp {
         if response.clicked()
             && let Some(pos) = response.interact_pointer_pos()
         {
-            let u = ((pos.x - rect.left()) / rect.width()).clamp(0.0, 1.0);
-            let v = ((pos.y - rect.top()) / rect.height()).clamp(0.0, 1.0);
-            let rx = cx as f32 + u * cw as f32;
-            let ry = cy as f32 + v * ch as f32;
-            let (px, py) = processing::rotated_to_source(rx, ry, bw, bh, angle);
+            let (x, y) = to_source(pos);
             self.spots.push(Spot {
-                x: px / bw as f32,
-                y: py / bh as f32,
+                x,
+                y,
                 radius: radius_norm,
             });
             self.dirty = true;
@@ -1338,6 +1662,39 @@ fn start_face_worker(
                 .send(FaceResult {
                     generation: job.generation,
                     faces,
+                })
+                .is_err()
+            {
+                break;
+            }
+            ctx.request_repaint();
+        }
+    });
+}
+
+/// Reconstruiește zonele marcate (watermark, obiecte) pe imaginea la
+/// rezoluție completă. Modelul MI-GAN se încarcă la prima utilizare.
+fn start_inpaint_worker(
+    job_rx: mpsc::Receiver<InpaintJob>,
+    result_tx: mpsc::Sender<InpaintResult>,
+    ctx: Context,
+) {
+    std::thread::spawn(move || {
+        let mut model: Option<Result<rten::Model, String>> = None;
+        while let Ok(job) = job_rx.recv() {
+            let model = model.get_or_insert_with(inpaint::load_model);
+            let (width, height) = job.source.dimensions();
+            let mask = inpaint::rasterize_strokes(&job.strokes, width, height);
+            let (image, ai_error) = inpaint::inpaint(model.as_ref().ok(), &job.source, &mask);
+            let fallback = match model {
+                Err(error) => Some(error.clone()),
+                Ok(_) => ai_error,
+            };
+            if result_tx
+                .send(InpaintResult {
+                    generation: job.generation,
+                    image,
+                    fallback,
                 })
                 .is_err()
             {

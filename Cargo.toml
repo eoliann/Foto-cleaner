@@ -1,6 +1,6 @@
 [package]
 name = "foto-cleaner"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2024"
 description = "Editor portabil de fotografii: corecții, retuș, eliminare și înlocuire fundal cu AI local"
 readme = "README.md"
