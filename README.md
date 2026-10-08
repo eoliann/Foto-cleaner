@@ -103,7 +103,7 @@ Structura codului:
 .\build-portable.ps1
 ```
 
-Executabilul independent va fi creat în `dist\Foto-cleaner.exe`. Un tag `v*` (de exemplu `v1.0.0`) publică automat un GitHub Release prin workflow-ul din `.github/workflows/windows.yml`.
+Executabilul independent va fi creat în `dist\Foto-cleaner.exe`. Un tag `v*` (de exemplu `v1.0.0`) publică automat un GitHub Release prin workflow-ul din `.github/workflows/windows.yml`. Textul release-ului este luat din `release-notes/<tag>.md` (de exemplu `release-notes/v1.2.0.md`), care trebuie adăugat în commit înainte de crearea tag-ului.
 
 ## Tehnologii
 

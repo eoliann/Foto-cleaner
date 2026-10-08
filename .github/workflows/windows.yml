@@ -62,6 +62,11 @@ jobs:
       RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
 
     steps:
+      - name: Checkout release notes
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: release-notes
+
       - name: Download Windows artifact
         uses: actions/download-artifact@v5
         with:
@@ -78,8 +83,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
+          # Textul release-ului vine din release-notes/<tag>.md; fără fișier, GitHub generează un link de changelog.
+          NOTES_FILE="release-notes/$RELEASE_TAG.md"
+          if [ -f "$NOTES_FILE" ]; then
+            NOTES=(--notes-file "$NOTES_FILE")
+          else
+            NOTES=(--generate-notes)
+          fi
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "Foto-cleaner-windows.zip" --clobber
+            if [ -f "$NOTES_FILE" ]; then
+              gh release edit "$RELEASE_TAG" --notes-file "$NOTES_FILE"
+            fi
           else
-            gh release create "$RELEASE_TAG" "Foto-cleaner-windows.zip" --generate-notes --title "Foto Cleaner $RELEASE_TAG"
+            gh release create "$RELEASE_TAG" "Foto-cleaner-windows.zip" "${NOTES[@]}" --title "Foto Cleaner $RELEASE_TAG"
           fi
