@@ -37,70 +37,70 @@
 
 # Foto Cleaner
 
-Aplicație desktop Windows, portabilă și offline, care curăță și corectează o fotografie și salvează **o singură imagine** finală. Pornește de la [Foto acte 3x4](https://github.com/eoliann/Foto-acte-3x4), dar exportă o singură imagine în loc de coala cu 6 fotografii.
+A portable, offline Windows desktop app that cleans and corrects a photo and saves **a single** final image. It starts from [Foto acte 3x4](https://github.com/eoliann/Foto-acte-3x4), but exports one image instead of the sheet with 6 photos.
 
-## Funcționalități
+## Features
 
-**Corecție automată.** Butonul **✨ Auto-corecție** analizează fotografia, o îndreaptă și o încadrează după față, și setează automat expunerea, balansul de alb (temperatură și nuanță), umbrele, luminile, contrastul, saturația, reducerea zgomotului și accentuarea. Dacă persoana a fost detectată de AI, corecția se optimizează după tonul pielii. Toate valorile pot fi apoi reglate manual.
+**Automatic correction.** The **✨ Auto-correction** (*Auto-corecție*) button analyzes the photo, straightens and frames it based on the face, and automatically sets exposure, white balance (temperature and tint), shadows, highlights, contrast, saturation, noise reduction and sharpening. If the person was detected by the AI, the correction is optimized for the skin tone. All values can then be adjusted manually.
 
-**Corecții manuale:**
+**Manual corrections:**
 
-- lumină: expunere, luminozitate, contrast, lumini, umbre;
-- culoare: saturație, vibranță, temperatură, nuanță;
-- detalii: claritate (contrast local), accentuare, reducere zgomot.
+- light: exposure, brightness, contrast, highlights, shadows;
+- color: saturation, vibrance, temperature, tint;
+- detail: clarity (local contrast), sharpening, noise reduction.
 
-**Eliminare impurități:**
+**Blemish removal:**
 
-- netezirea pielii, aplicată doar pe zonele de piele (și doar pe persoană, când AI-ul a detectat-o), cu păstrarea marginilor;
-- pensulă pentru pete: click pe coșuri, pete sau praf și zona este reconstruită din textura din jur;
-- reducerea zgomotului / granulației cu un filtru care păstrează marginile.
+- skin smoothing, applied only to skin areas (and only on the person, when the AI detected one), preserving edges;
+- spot brush: click on pimples, spots or dust and the area is reconstructed from the surrounding texture;
+- noise / grain reduction with an edge-preserving filter.
 
-**Eliminare watermark / obiecte (AI local, MI-GAN):**
+**Watermark / object removal (local AI, MI-GAN):**
 
-- pictezi cu pensula peste watermark, text, data imprimată de aparat sau un obiect mic nedorit, apoi apeși **Elimină zona marcată**;
-- zona este reconstruită de AI din ce se află în jur, la rezoluția completă a fotografiei; zonele marcate departe una de alta sunt procesate separat;
-- poți anula ultimele 5 eliminări; dacă modelul AI nu poate fi folosit, zona este umplută prin metoda clasică;
-- folosește funcția doar pe fotografii proprii sau pe care ai dreptul să le modifici.
+- paint with the brush over a watermark, text, the date stamped by the camera or a small unwanted object, then click **Remove marked area** (*Elimină zona marcată*);
+- the area is reconstructed by the AI from its surroundings, at the photo's full resolution; marked areas far apart are processed separately;
+- you can undo the last 5 removals; if the AI model cannot be used, the area is filled with the classic method;
+- use this feature only on your own photos or photos you have the right to modify.
 
-**Detectarea feței (AI local, YuNet):**
+**Face detection (local AI, YuNet):**
 
-- îndreptare automată după linia ochilor, plus îndreptare manuală de ±15°;
-- încadrare automată pentru foto act (capul ocupă ~65% din înălțime, ochii la ~42% de sus) și pentru celelalte formate; se aplică și la schimbarea formatului;
-- auto-corecția reglează expunerea după pielea feței;
-- netezirea pielii se aplică doar pe față;
-- opțiunea „Arată fața detectată” afișează fața și reperele (ochi, nas, gură).
+- automatic straightening along the eye line, plus manual straightening of ±15°;
+- automatic framing for ID photos (head takes ~65% of the height, eyes at ~42% from the top) and for the other formats; also applied when the format changes;
+- auto-correction adjusts exposure based on the facial skin;
+- skin smoothing is applied only on the face;
+- the "Show detected face" option displays the face and landmarks (eyes, nose, mouth).
 
-**Fundal (AI local, MODNet):**
+**Background (local AI, MODNet):**
 
-- original, transparent (PNG), alb, gri deschis, albastru deschis, orice culoare;
-- fundal estompat (efect portret);
-- înlocuire cu o altă imagine;
-- reglarea fermității marginii și curățarea automată a „halo”-ului de pe contur.
+- original, transparent (PNG), white, light gray, light blue, any color;
+- blurred background (portrait effect);
+- replacement with another image;
+- edge firmness adjustment and automatic cleanup of the "halo" along the outline.
 
-**Format final:**
+**Final format:**
 
-- rezoluția originală, fără decupare;
-- foto act 3x4 cm (354x472 px, 300 DPI), cu zoom și poziționare;
-- decupare 1:1, 3:4, 4:3, 2:3 sau 16:9;
-- salvare JPEG (300 DPI) sau PNG; transparența se salvează automat ca PNG;
-- printare directă: foto act la mărime reală 3x4 cm, celelalte formate încadrate în pagină.
+- original resolution, no cropping;
+- ID photo 3x4 cm (354x472 px, 300 DPI), with zoom and positioning;
+- 1:1, 3:4, 4:3, 2:3 or 16:9 crop;
+- save as JPEG (300 DPI) or PNG; transparency is automatically saved as PNG;
+- direct printing: ID photo at real 3x4 cm size, other formats fitted to the page.
 
-Ca la aplicația inițială, poți roti imaginea, poți trage fotografia peste fereastră, orientarea EXIF este corectată automat și totul rulează local, fără internet.
+As with the original app, you can rotate the image, drag the photo onto the window, EXIF orientation is corrected automatically, and everything runs locally, without internet.
 
-## Utilizare
+## Usage
 
-1. Deschide `Foto-cleaner.exe` și încarcă fotografia (sau trage-o peste fereastră).
-2. Apasă **✨ Auto-corecție**, apoi reglează fin dacă e nevoie. Bifează **Arată originalul** ca să compari.
-3. Pentru pete: bifează **Pensulă pete**, alege mărimea și dă click pe fiecare pată.
-4. Pentru watermark sau obiecte: bifează **Pensulă watermark**, pictează peste zona respectivă și apasă **Elimină zona marcată**. La zone mari, rezultatul e mai bun dacă elimini pe bucăți.
-5. Alege fundalul. Prima procesare AI durează câteva secunde.
-6. Alege formatul final și apasă **Salvează imaginea** sau **Printează direct**.
+1. Open `Foto-cleaner.exe` and load the photo (or drag it onto the window).
+2. Click **✨ Auto-correction**, then fine-tune if needed. Check **Show original** (*Arată originalul*) to compare.
+3. For spots: check **Spot brush** (*Pensulă pete*), choose the size and click on each spot.
+4. For watermarks or objects: check **Watermark brush** (*Pensulă watermark*), paint over the area and click **Remove marked area**. For large areas, removing in pieces gives a better result.
+5. Choose the background. The first AI processing takes a few seconds.
+6. Choose the final format and click **Save image** (*Salvează imaginea*) or **Print directly** (*Printează direct*).
 
-Previzualizarea folosește o copie micșorată, ca să răspundă rapid. Exportul este procesat la rezoluție completă, cu aceleași setări.
+The preview uses a downscaled copy so it responds quickly. The export is processed at full resolution with the same settings.
 
-## Dezvoltare
+## Development
 
-Este necesar [Rust](https://www.rust-lang.org/tools/install) 1.94 sau mai nou.
+[Rust](https://www.rust-lang.org/tools/install) 1.94 or newer is required.
 
 ```powershell
 cargo run
@@ -109,22 +109,22 @@ cargo test --locked
 cargo clippy --locked --all-targets -- -D warnings
 ```
 
-Structura codului:
+Code structure:
 
-- `src/main.rs`: interfața (eframe/egui), firele de lucru, salvarea și printarea;
-- `src/processing.rs`: filtrele, retușul, auto-corecția, compunerea fundalului și încadrarea;
-- `src/ai.rs`: segmentarea persoanei cu MODNet;
-- `src/face.rs`: detectarea feței și a reperelor cu YuNet;
-- `src/inpaint.rs`: eliminarea watermark-urilor și a obiectelor cu MI-GAN (plus umplere clasică de rezervă).
+- `src/main.rs`: the interface (eframe/egui), worker threads, saving and printing;
+- `src/processing.rs`: filters, retouching, auto-correction, background compositing and framing;
+- `src/ai.rs`: person segmentation with MODNet;
+- `src/face.rs`: face and landmark detection with YuNet;
+- `src/inpaint.rs`: watermark and object removal with MI-GAN (plus a classic fallback fill).
 
-## Build portabil
+## Portable build
 
 ```powershell
 .\build-portable.ps1
 ```
 
-Executabilul independent va fi creat în `dist\Foto-cleaner.exe`. Un tag `v*` (de exemplu `v1.0.0`) publică automat un GitHub Release prin workflow-ul din `.github/workflows/windows.yml`. Textul release-ului este luat din `release-notes/<tag>.md` (de exemplu `release-notes/v1.2.0.md`), care trebuie adăugat în commit înainte de crearea tag-ului.
+The standalone executable will be created at `dist\Foto-cleaner.exe`. A `v*` tag (for example `v1.0.0`) automatically publishes a GitHub Release through the workflow in `.github/workflows/windows.yml`. The release text is taken from `release-notes/<tag>.md` (for example `release-notes/v1.2.0.md`), which must be added in the commit before the tag is created.
 
-## Tehnologii
+## Technologies
 
-Rust cu `eframe/egui`, crate-ul `image` și filtre proprii (filtru ghidat, unsharp mask, interpolare Shepard pentru retuș). Rulează trei modele AI prin runtime-ul `RTen`: MODNet pentru eliminarea fundalului (Apache-2.0), YuNet pentru detectarea feței (MIT, ~230 KB) și MI-GAN pentru eliminarea watermark-urilor (MIT, ~27 MB). Toate sunt incluse în executabil; detaliile sunt în [`assets/README.md`](assets/README.md).
+Rust with `eframe/egui`, the `image` crate and custom filters (guided filter, unsharp mask, Shepard interpolation for retouching). It runs three AI models through the `RTen` runtime: MODNet for background removal (Apache-2.0), YuNet for face detection (MIT, ~230 KB) and MI-GAN for watermark removal (MIT, ~27 MB). All are embedded in the executable; details are in [`assets/README.md`](assets/README.md).
